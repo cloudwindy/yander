@@ -1,0 +1,9 @@
+{
+    "log_file": "YandeLOG.log",
+    "start": 1,
+    "end": 100,
+    "step": 1,
+    "tags": "yosuga_no_sora",
+    "thread_num": 5,
+    "save_dir": "./save/yosuga_no_sora/"
+}
