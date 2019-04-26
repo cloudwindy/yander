@@ -13,7 +13,7 @@ def main():
     conf = loads(file.read())
     file.close()
     basicConfig(level=DEBUG, format='[%(asctime)s %(name)s %(levelname)s] %(message)s', filename=conf['log_file'], filemode='w')
-    Crawler(range(conf['start'], conf['end'], conf['step']), conf['tags'], conf['thread_num'], conf['save_dir']).run()
+    Crawler(range(conf['start'], conf['end'], conf['step']), conf['tags'], conf['except_tags'], conf['thread_num'], conf['save_dir']).run()
 
 if __name__ == '__main__':
     main()

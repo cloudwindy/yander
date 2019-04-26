@@ -23,9 +23,10 @@ __version__ = '1.8'
 __all__ = ['Crawler']
 
 class Crawler:
-    def __init__(self, page_list, tags, thread_num, save_dir):
+    def __init__(self, page_list, tags, except_tags, thread_num, save_dir):
         self.page_list = page_list
         self.tags = tags
+        self.except_tags = except_tags
         self.thread_num = thread_num
         self.save_dir = save_dir
         self.log = getLogger('MainThread')
@@ -50,6 +51,7 @@ class Crawler:
                     break
                 for pic in pic_list:
                     pic['save_dir'] = self.save_dir
+                    pic['except_tags'] = self.except_tags
                     pic['force_download'] = False
                 pool.map(CrawlerTask, pic_list)
         except KeyboardInterrupt:
@@ -62,6 +64,8 @@ class Crawler:
 
 class CrawlerTask:
     def __init__(self, pic):
+        self.tags = pic['tags']
+        self.except_tags = pic['except_tags']
         self.url = pic['file_url']
         self.md5 = pic['md5']
         self.file_size = pic['file_size']
@@ -69,16 +73,20 @@ class CrawlerTask:
         self.force_download = pic['force_download']
         self.log = getLogger('Task' + str(pic['id']))
         try:
-            self.get()
-            if self.check():
-                self.save()
-            else:
-                pic['force_download'] = True
-                self.__init__(pic)
+            if self.check_tags():
+                self.get()
+                if self.check_md5():
+                    self.save()
+                else:
+                    pic['force_download'] = True
+                    self.__init__(pic)
         except HTTPError as e:
             self.log.error('Downloading failed due to network error.')
         except Exception as e:
             self.log.exception('Downloading failed due to unknown error. The details are as follows:')
+
+    def check_tags(self):
+        return self.tags.find(self.except_tags) == -1
 
     def get(self):
         if not self.force_download and exists(self.save_path):
@@ -98,7 +106,7 @@ class CrawlerTask:
             speed = len(self.pic) / exec_time # bytes / sec
             self.log.info('Downloading completed. Speed: %s/s.' % self.convert(speed))
 
-    def check(self):
+    def check_md5(self):
         checker = md5()
         checker.update(self.pic)
         if checker.hexdigest() != self.md5:
