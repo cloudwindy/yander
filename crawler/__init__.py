@@ -45,72 +45,68 @@ class Crawler:
                     'tags': self.tags
                 }
                 pic_list = loads(urlopen('http://92.222.110.68/post.json?' + urlencode(param)).read().decode())
-                self.log.info('Page contains %d pictures' % len(pic_list))
                 if len(pic_list) <= 0:
                     self.log.info('Page was empty. Exiting.')
                     break
-                for pic in pic_list:
-                    pic['save_dir'] = self.save_dir
-                    pic['except_tags'] = self.except_tags
-                    pic['force_download'] = False
+                i = 0
+                while i < len(pic_list):
+                    v = pic_list[i]
+                    pic_list[i]['save_path'] = '%s%d.%s' % (self.save_dir, v['id'], v['file_ext'])
+                    if self.check(v):
+                        pic_list.remove(v)
+                    else:
+                        i += 1
+                self.log.info('Page contains %d downloadable pictures' % len(pic_list))
                 pool.map(CrawlerTask, pic_list)
         except KeyboardInterrupt:
             self.log.info('Interrupted by user. Exiting.')
-        except Exception as e:
+        except Exception:
             self.log.exception('Failed due to unknown error. The details are as follows:')
         pool.close()
         pool.join()
         self.log.info('Main thread exited')
+    
+    def check(self, pic):
+        return exists(pic['save_path']) or self.tags.find(self.except_tags) != -1
 
 class CrawlerTask:
     def __init__(self, pic):
         self.tags = pic['tags']
-        self.except_tags = pic['except_tags']
         self.url = pic['file_url']
         self.md5 = pic['md5']
         self.file_size = pic['file_size']
-        self.save_path = '%s%d.%s' % (pic['save_dir'], pic['id'], pic['file_ext'])
-        self.force_download = pic['force_download']
+        self.save_path = pic['save_path']
         self.log = getLogger('Task' + str(pic['id']))
         try:
-            if self.check_tags():
-                self.get()
-                if self.check_md5():
-                    self.save()
-                else:
-                    pic['force_download'] = True
-                    self.__init__(pic)
-        except HTTPError as e:
+            self.get()
+            if self.check():
+                self.save()
+            else:
+                self.__init__(pic)
+        except HTTPError:
             self.log.error('Downloading failed due to network error.')
-        except Exception as e:
+        except Exception:
             self.log.exception('Downloading failed due to unknown error. The details are as follows:')
 
-    def check_tags(self):
-        return self.tags.find(self.except_tags) == -1
-
     def get(self):
-        if not self.force_download and exists(self.save_path):
-            file = open(self.save_path, 'rb')
-            self.pic = file.read()
-            file.close()
-        else:
-            http_response = urlopen(self.url)
-            self.log.info('Downloading started. Size: %s.' % self.convert(self.file_size))
-            start_time = time()
-            try:
-                self.pic = http_response.read()
-            except IncompleteRead as e:
-                self.pic = e.partial
-            end_time = time()
-            exec_time = end_time - start_time
-            speed = len(self.pic) / exec_time # bytes / sec
-            self.log.info('Downloading completed. Speed: %s/s.' % self.convert(speed))
+        http_response = urlopen(self.url)
+        self.log.info('Downloading started. Size: %s.' % self.convert(self.file_size))
+        start_time = time()
+        try:
+            self.pic = http_response.read()
+        except IncompleteRead as e:
+            self.pic = e.partial
+        end_time = time()
+        exec_time = end_time - start_time
+        speed = len(self.pic) / exec_time # bytes / sec
+        self.log.info('Downloading completed. Speed: %s/s.' % self.convert(speed))
 
-    def check_md5(self):
+    def check(self):
         checker = md5()
         checker.update(self.pic)
-        if checker.hexdigest() != self.md5:
-            self.log.info('Verification failed.')
+        result_md5 = checker.hexdigest()
+        if result_md5 != self.md5:
+            self.log.info('MD5 check failed. MD5: %s' % result_md5)
             return False
         else:
             return True
