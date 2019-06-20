@@ -9,8 +9,7 @@ from time                  import time, sleep
 from json                  import loads
 from logging               import getLogger
 from hashlib               import md5
-from threading             import Thread
-from threading             import enumerate as enum
+from threading             import Thread, enumerate as enum
 from http.client           import IncompleteRead
 from urllib.error          import HTTPError
 from urllib.parse          import urlencode
@@ -46,7 +45,7 @@ class Crawler:
                 }
                 pic_list = loads(urlopen('http://92.222.110.68/post.json?' + urlencode(param)).read().decode())
                 if len(pic_list) <= 0:
-                    self.log.info('Page was empty. Exiting.')
+                    self.log.info('Page empty. Exiting.')
                     break
                 i = 0
                 while i < len(pic_list):
@@ -61,7 +60,7 @@ class Crawler:
         except KeyboardInterrupt:
             self.log.info('Interrupted by user. Exiting.')
         except Exception:
-            self.log.exception('Failed due to unknown error. The details are as follows:')
+            self.log.exception('Fail due to unknown error. Details as follows:')
         pool.close()
         pool.join()
         self.log.info('Main thread exited')
@@ -84,13 +83,13 @@ class CrawlerTask:
             else:
                 self.__init__(pic)
         except HTTPError:
-            self.log.error('Downloading failed due to network error.')
+            self.log.error('Download fail due to network error.')
         except Exception:
-            self.log.exception('Downloading failed due to unknown error. The details are as follows:')
+            self.log.exception('Download fail due to unknown error. Details as follows:')
 
     def get(self):
         http_response = urlopen(self.url)
-        self.log.info('Downloading started. Size: %s.' % self.convert(self.file_size))
+        self.log.info('Download start. Size: %s.' % self.convert(self.file_size))
         start_time = time()
         try:
             self.pic = http_response.read()
@@ -99,14 +98,14 @@ class CrawlerTask:
         end_time = time()
         exec_time = end_time - start_time
         speed = len(self.pic) / exec_time # bytes / sec
-        self.log.info('Downloading completed. Speed: %s/s.' % self.convert(speed))
+        self.log.info('Download complete. Speed: %s/s.' % self.convert(speed))
 
     def check(self):
         checker = md5()
         checker.update(self.pic)
         result_md5 = checker.hexdigest()
         if result_md5 != self.md5:
-            self.log.info('MD5 check failed. MD5: %s' % result_md5)
+            self.log.info('MD5 check fail. MD5: %s' % result_md5)
             return False
         else:
             return True
@@ -118,10 +117,10 @@ class CrawlerTask:
 
     def convert(self, size):
         # Reference：https://blog.csdn.net/mp624183768/article/details/84892999
-        kb = 1024;
-        mb = kb * 1024;
-        gb = mb * 1024;
-        tb = gb * 1024;
+        kb = 1024
+        mb = 1024 * 1024
+        gb = 1024 * 1024 * 1024
+        tb = 1024 * 1024 * 1024 * 1024
         if size >= tb:
             return '%.1f TB' % (size / tb)
         elif size >= gb:
