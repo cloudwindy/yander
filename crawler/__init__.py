@@ -2,6 +2,9 @@
 Yande.re Crawler - A crawler to get pictures automatically
 from Yande.re.
 """
+
+import ssl
+from ssl                   import _create_unverified_context
 from os                    import makedirs
 from os.path               import exists
 from sys                   import maxsize
@@ -10,105 +13,129 @@ from json                  import loads
 from logging               import getLogger
 from hashlib               import md5
 from threading             import Thread, enumerate as enum
-from http.client           import IncompleteRead
-from urllib.error          import HTTPError
+from http.client           import IncompleteRead, RemoteDisconnected
+from urllib.error          import URLError, HTTPError
 from urllib.parse          import urlencode
 from urllib.request        import urlopen
-from multiprocessing.dummy import Pool as ThreadPool
+from multiprocessing.dummy import Pool
 
 __author__ = 'cloudwindy'
-__version__ = '1.8'
+__version__ = '1.9'
 
-__all__ = ['Crawler']
+__all__ = ['Main']
 
-class Crawler:
-    def __init__(self, page_list, tags, except_tags, thread_num, save_dir):
+# Prevent SSLError
+ssl._create_default_https_context=_create_unverified_context
+
+class Main:
+    def __init__(self, page_list, tags, thread_num, save_dir):
         self.page_list = page_list
-        self.tags = tags
-        self.except_tags = except_tags
+        self.tags = tags        
         self.thread_num = thread_num
         self.save_dir = save_dir
-        self.log = getLogger('MainThread')
-        self.log.info('Yande.re Crawler v1.8 by cloudwindy')
+        self.log = getLogger('Main')
+        self.log.info('YandeCrawler 1.9')
+        if thread_num > 5:
+            self.log.warning('Option thread_num is bigger than 5')
+            self.log.warning('And this may cause some problems')
+        if tags == '':
+            self.log.warning('Option tags not specified')
+            self.log.warning('Default tag is wildcard')
 
     def run(self):
         try:
-            pool = ThreadPool(self.thread_num)
+            pool = Pool(self.thread_num)
             if not exists(self.save_dir):
                 makedirs(self.save_dir)
             for page in self.page_list:
-                self.log.info('Working on page %d.' % page)
-                param = {
-                    'limit': 100,
-                    'page': page,
-                    'tags': self.tags
-                }
-                pic_list = loads(urlopen('http://92.222.110.68/post.json?' + urlencode(param)).read().decode())
+                self.log.info('Page %d: Getting metadata' % page)
+                url = 'https://yande.re/post.json?limit=100&page=%d&tags=%s' % (page, self.tags)
+                pic_list = loads(urlopen(url).read().decode())
+                # Exit when this is the last page
                 if len(pic_list) <= 0:
-                    self.log.info('Page empty. Exiting.')
+                    self.log.info('Page %d: Empty. Exiting' % page)
                     break
+                # Sort by size, the first is the smallest
+                pic_list.sort(key = lambda pic_list: pic_list['file_size'], reverse = False)
+                # Fill savepath and _id
                 i = 0
                 while i < len(pic_list):
                     v = pic_list[i]
                     pic_list[i]['save_path'] = '%s%d.%s' % (self.save_dir, v['id'], v['file_ext'])
-                    if self.check(v):
-                        pic_list.remove(v)
-                    else:
-                        i += 1
-                self.log.info('Page contains %d downloadable pictures' % len(pic_list))
-                pool.map(CrawlerTask, pic_list)
+                    pic_list[i]['_id'] = i
+                    i += 1
+                # Remove duplicates
+                for pic in pic_list:
+                    if exists(pic['save_path']):
+                        pic_list.remove(pic)
+                if len(pic_list) > 0:
+                    self.log.info('Page %d: Got. Total %d pics' % (page, len(pic_list)))
+                    self.log.info('Page %d: Working' % page)
+                    pool.map(Task, pic_list)
+                self.log.info('Page %d: Done' % page)
         except KeyboardInterrupt:
             self.log.info('Interrupted by user. Exiting.')
+        except HTTPError as e:
+            o = e.reason
+            self.log.error('HTTPError %d %s' % (o.errno, o.strerror))
+        except URLError as e:
+            o = e.reason
+            self.log.error('URLError %d %s' % (o.errno, o.strerror))
         except Exception:
-            self.log.exception('Fail due to unknown error. Details as follows:')
+            self.log.exception('Error happens')
         pool.close()
+        self.log.info('Waiting for tasks')
         pool.join()
-        self.log.info('Main thread exited')
-    
-    def check(self, pic):
-        return exists(pic['save_path']) or self.tags.find(self.except_tags) != -1
+        self.log.info('Control exited')
 
-class CrawlerTask:
+class Task:
     def __init__(self, pic):
         self.tags = pic['tags']
         self.url = pic['file_url']
         self.md5 = pic['md5']
         self.file_size = pic['file_size']
         self.save_path = pic['save_path']
-        self.log = getLogger('Task' + str(pic['id']))
+        self.log = getLogger('T' + str(pic['_id']).rjust(3))
         try:
+            self.log.info('Task start. Size: %s' % self.convert(self.file_size))
             self.get()
             if self.check():
                 self.save()
             else:
+                self.log.warning('Integrity check fail')
                 self.__init__(pic)
-        except HTTPError:
-            self.log.error('Download fail due to network error.')
+            self.log.info('Task done. Speed: %s/s' % self.convert(self.speed))
+        except ConnectionAbortedError as e:
+            self.log.warning('Connection aborted')
+            self.__init__(pic)
+        except ConnectionResetError as e:
+            self.log.warning('Connection reset')
+            self.__init__(pic)
+        except IncompleteRead as e:
+            self.log.warning('Incomplete read')
+            self.__init__(pic)
+        except HTTPError as e:
+            o = e.reason
+            self.log.error('HTTPError %d %s' % (o.errno, o.strerror))
+        except URLError as e:
+            o = e.reason
+            self.log.error('URLError %d %s' % (o.errno, o.strerror))
+            self.__init__(pic)
         except Exception:
-            self.log.exception('Download fail due to unknown error. Details as follows:')
+            self.log.exception('Error happens')
 
     def get(self):
-        http_response = urlopen(self.url)
-        self.log.info('Download start. Size: %s.' % self.convert(self.file_size))
         start_time = time()
-        try:
-            self.pic = http_response.read()
-        except IncompleteRead as e:
-            self.pic = e.partial
+        self.pic = urlopen(self.url).read()
         end_time = time()
         exec_time = end_time - start_time
-        speed = len(self.pic) / exec_time # bytes / sec
-        self.log.info('Download complete. Speed: %s/s.' % self.convert(speed))
-
+        self.speed = len(self.pic) / exec_time # bytes / sec
+        
     def check(self):
         checker = md5()
         checker.update(self.pic)
         result_md5 = checker.hexdigest()
-        if result_md5 != self.md5:
-            self.log.info('MD5 check fail. MD5: %s' % result_md5)
-            return False
-        else:
-            return True
+        return result_md5 == self.md5
 
     def save(self):
         file = open(self.save_path, 'wb')
