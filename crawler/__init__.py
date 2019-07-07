@@ -57,17 +57,21 @@ class Main:
                     break
                 # Sort by size, the first is the smallest
                 pic_list.sort(key = lambda pic_list: pic_list['file_size'], reverse = False)
-                # Fill savepath and _id
+                # Fill savepath
                 i = 0
                 while i < len(pic_list):
                     v = pic_list[i]
                     pic_list[i]['save_path'] = '%s%d.%s' % (self.save_dir, v['id'], v['file_ext'])
-                    pic_list[i]['_id'] = i
                     i += 1
-                # Remove duplicates
+                # Remove duplicates by savepath
                 for pic in pic_list:
                     if exists(pic['save_path']):
                         pic_list.remove(pic)
+                # Give IDs
+                i = 0
+                while i<len(pic_list):
+                    pic_list[i]['_id'] = i
+                    i += 1
                 if len(pic_list) > 0:
                     self.log.info('Page %d: Got. Total %d pics' % (page, len(pic_list)))
                     self.log.info('Page %d: Working' % page)
