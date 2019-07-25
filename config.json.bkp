@@ -2,8 +2,8 @@
 	"log_file": "/var/log/yande-crawler.log",
 	"start": 1,
 	"step": 1,
-	"end": 100,
-	"tags": "gekidoku_shoujo",
+	"end": 10,
+	"tags": "order:score",
 	"thread_num": 5,
-	"save_dir": "/root/save/GekidokuShoujo/"
+	"save_dir": "/root/save/OrderByScore/"
 }

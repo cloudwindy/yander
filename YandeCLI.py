@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/bin/env python3
 # -*- coding: utf-8 -*-
 from os       import chdir
 from json     import loads
@@ -7,7 +7,7 @@ from argparse import ArgumentParser
 from logging  import basicConfig, DEBUG, INFO, WARNING, ERROR, CRITICAL
 def main():
     parser = ArgumentParser(description = 'A crawler for yande.re')
-    parser.add_argument('-v', '--version', action = 'version', version = 'Yande.re Crawler v1.8 by cloudwindy')
+    parser.add_argument('-v', '--version', action = 'version', version = 'Yande.re Crawler v1.9 by cloudwindy')
     parser.add_argument('-p', '--prefix', default = '.', help = 'specify prefix directory')
     parser.add_argument('-c', '--conf', default = 'config.json', help = 'specify config file path')
     args = parser.parse_args()

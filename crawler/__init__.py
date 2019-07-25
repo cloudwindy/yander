@@ -30,17 +30,17 @@ ssl._create_default_https_context=_create_unverified_context
 class Main:
     def __init__(self, page_list, tags, thread_num, save_dir):
         self.page_list = page_list
-        self.tags = tags        
+        self.tags = tags
         self.thread_num = thread_num
         self.save_dir = save_dir
         self.log = getLogger('Main')
-        self.log.info('YandeCrawler 1.9')
+        self.log.info('YandeCrawler %s' % __version__)
         if thread_num > 5:
             self.log.warning('Option thread_num is bigger than 5')
             self.log.warning('And this may cause some problems')
         if tags == '':
-            self.log.warning('Option tags not specified')
-            self.log.warning('Default tag is wildcard')
+            self.log.info('Option tags not specified')
+            self.log.info('Default tag is wildcard')
 
     def run(self):
         try:
@@ -101,7 +101,6 @@ class Task:
         self.save_path = pic['save_path']
         self.log = getLogger('T' + str(pic['_id']).rjust(3))
         try:
-            self.log.info('Task start. Size: %s' % self.convert(self.file_size))
             self.get()
             if self.check():
                 self.save()
@@ -134,7 +133,7 @@ class Task:
         end_time = time()
         exec_time = end_time - start_time
         self.speed = len(self.pic) / exec_time # bytes / sec
-        
+
     def check(self):
         checker = md5()
         checker.update(self.pic)
