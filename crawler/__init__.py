@@ -22,7 +22,7 @@ __version__ = '1.9'
 __all__ = ['run_main']
 
 # Prevent SSLError
-ssl._create_default_https_context=_create_unverified_context
+ssl._create_default_https_context = _create_unverified_context
 
 # Public functions
 def run_main(page_list, tags, thread_num, save_dir):
@@ -41,6 +41,8 @@ def run_main(page_list, tags, thread_num, save_dir):
     try:
         pool = Pool(thread_num)
         if not exists(save_dir):
+            log.info("Save dir doesn't exist")
+            log.info('Creating save dir')
             makedirs(save_dir)
         for page in page_list:
             log.info('Page %d: Getting metadata' % page)
@@ -95,7 +97,7 @@ def get_pic(pic):
     log = getLogger('T' + str(pic['_id']).rjust(3))
     try:
         (file, speed) = _fetch_file(pic['file_url'])
-        if len(file) != pic['file_size'] or _check(file, pic['md5']):
+        if len(file) == pic['file_size'] and _check(file, pic['md5']):
             _save(file, pic['save_path'])
             log.info('Task done. Speed: %s/s' % _convert(speed))
         else:
@@ -121,7 +123,7 @@ def _fetch_file(url):
     file = urlopen(url).read()
     end_time = time()
     exec_time = end_time - start_time
-    return file, (len(file) / exec_time) # bytes / sec
+    return (file, (len(file) / exec_time)) # bytes / sec
 
 def _check(file, file_md5):
     checker = md5()
@@ -130,9 +132,9 @@ def _check(file, file_md5):
     return result_md5 == file_md5
 
 def _save(file, save_path):
-    file = open(save_path, 'wb')
-    file.write(file)
-    file.close()
+    f = open(save_path, 'wb')
+    f.write(file)
+    f.close()
 
 def _convert(size):
     # Reference：https://blog.csdn.net/mp624183768/article/details/84892999
