@@ -1,5 +1,5 @@
 {
-	"log_file": "/var/log/yande-crawler.log",
+	"log_file": "/dev/tty",
 	"start": 1,
 	"step": 1,
 	"end": 100,
