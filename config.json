@@ -1,0 +1,6 @@
+{
+	"log_file": "yande.log",
+	"tags": "trap+order:score+-extreme_content",
+	"thread_num": 5,
+	"save_dir": "./Trap/"
+}
