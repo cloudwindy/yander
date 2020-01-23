@@ -1,1 +1,0 @@
-CreateObject("WScript.Shell").Run "C:\Users\seewo\AppData\Local\Programs\Python\Python37\python.exe main.py", 0
