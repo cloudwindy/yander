@@ -31,11 +31,12 @@ def main():
     parser.add_argument('-v', '--version', action = 'version', version = 'Yande.re Crawler v%s by %s' % (__version__, __author__))
     parser.add_argument('-p', '--prefix', default = '.', help = 'specify prefix directory')
     parser.add_argument('-c', '--conf', default = 'config.json', help = 'specify config file path')
-    parser.add_argument('-s', '--no-verify-ssl', default = False, help = "don't ")
+    parser.add_argument('-s', '--no-verify-ssl', default = False, help = "don't verify ssl")
     args = parser.parse_args()
     try:
         chdir(args.prefix)
-    except:
+    except FileNotFoundError:
+        print("路径不存在! 请检查后重试")
     file = open(args.conf, 'r')
     conf = loads(file.read())
     file.close()
