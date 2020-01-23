@@ -1,6 +1,16 @@
 {
+<<<<<<< HEAD
 	"log_file": "yande.log",
 	"tags": "trap+order:score+-extreme_content",
 	"thread_num": 5,
 	"save_dir": "./Trap/"
+=======
+	"log_file": "/dev/tty",
+	"start": 1,
+	"step": 1,
+	"end": 100,
+	"tags": "gekidoku_shoujo",
+	"thread_num": 5,
+	"save_dir": "/root/save/GekidokuShoujo/"
+>>>>>>> 3bd6646cbbb47f0d7ec52d2ed3f6160cc59577bb
 }
