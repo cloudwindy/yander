@@ -16,7 +16,7 @@ from hashlib               import md5
 from argparse              import ArgumentParser
 from http.client           import IncompleteRead
 from urllib.error          import URLError, HTTPError
-from urllib.request        import urlopen
+from urllib.request        import urlopen, ProxyHandler, build_opener
 from multiprocessing.dummy import Pool
 from logging               import basicConfig, DEBUG, INFO, WARNING, ERROR, CRITICAL
 
@@ -24,26 +24,14 @@ __author__ = 'cloudwindy'
 __version__ = '1.9'
 
 # 如果遇到SSL相关问题 取消这行注释
-#ssl._create_default_https_context = _create_unverified_context
-
-def main():
-    parser = ArgumentParser(description = 'A crawler for yande.re')
-    parser.add_argument('-v', '--version', action = 'version', version = 'Yande.re Crawler v%s by %s' % (__version__, __author__))
-    parser.add_argument('-p', '--prefix', default = '.', help = 'specify prefix directory')
-    parser.add_argument('-c', '--conf', default = 'config.json', help = 'specify config file path')
-    parser.add_argument('-s', '--no-verify-ssl', default = False, help = "don't verify ssl")
-    args = parser.parse_args()
-    try:
-        chdir(args.prefix)
-    except FileNotFoundError:
-        print("路径不存在! 请检查后重试")
-    file = open(args.conf, 'r')
-    conf = loads(file.read())
-    file.close()
-    basicConfig(level=DEBUG, format='[%(asctime)s %(name)s %(levelname)s] %(message)s', filename=conf['log_file'], filemode='w')
-    run_main(conf['tags'], conf['thread_num'], conf['save_dir'])
-
-def run_main(tags, thread_num, save_dir):
+ssl._create_default_https_context = _create_unverified_context
+proxy = '127.0.0.1:1080'
+proxy_handler = ProxyHandler({
+    'http': 'http://' + proxy,
+    'https': 'https://' + proxy
+})
+opener = build_opener(proxy_handler)
+def main(tags, thread_num, save_dir):
     tags = tags
     thread_num = thread_num
     save_dir = save_dir
@@ -54,8 +42,8 @@ def run_main(tags, thread_num, save_dir):
         log.warning('原因是 Yande.re 网站最大连接数为 5')
     if tags == '':
         log.info('未指定标签 默认下载所有图片')
+    pool = Pool(thread_num)
     try:
-        pool = Pool(thread_num)
         if not exists(save_dir):
             log.info('保存路径不存在')
             log.info('已创建文件夹' + save_dir)
@@ -63,13 +51,11 @@ def run_main(tags, thread_num, save_dir):
         for page in range(1, maxsize):
             log.info('页面 %d: 正在获取元数据' % page)
             url = 'http://yande.re/post.json?limit=100&page=%d&tags=%s' % (page, tags)
-            pic_list = loads(urlopen(url).read().decode())
+            pic_list = loads(opener.open(url).read().decode())
             # 检测 图片数量
             if len(pic_list) <= 0:
                 log.info('页面 %d: 已到达最后一页 准备退出' % page)
                 break
-            # 排序 从大到小排列
-            pic_list.sort(key = lambda pic_list: pic_list['file_size'], reverse = True)
             # 给定 保存路径
             i = 0
             while i < len(pic_list):
@@ -77,10 +63,11 @@ def run_main(tags, thread_num, save_dir):
                 pic_list[i]['save_path'] = '%s%d.%s' % (save_dir, v['id'], v['file_ext'])
                 i += 1
             # 移除 重复图片
-            for pic in pic_list:
+            for pic in pic_list[:]:
                 if exists(pic['save_path']):
-                    log.debug('页面 %d: ')
                     pic_list.remove(pic)
+            # 排序 从大到小排列
+            pic_list.sort(key = lambda pic_list: pic_list['file_size'], reverse = True)
             # 给定 图片ID
             i = 0
             while i < len(pic_list):
@@ -91,16 +78,18 @@ def run_main(tags, thread_num, save_dir):
                 log.info('页面 %d: 开始下载' % page)
                 pool.map(get_pic, pic_list)
                 log.info('页面 %d: 下载完毕' % page)
+            else:
+                log.info('页面 %d: 已跳过' % page)
     except KeyboardInterrupt:
         log.info('用户已关闭程序 准备退出')
     except HTTPError as e:
         o = e.reason
-        log.exception('服务器错误 原因：%d %s' % (o.errno, o.strerror))
+        log.exception('服务器错误 原因: %s' % o)
     except URLError as e:
         o = e.reason
-        log.exception('链接错误 原因：%d %s' % (o.errno, o.strerror))
+        log.exception('链接错误 原因: %d %s' % (o.errno, o.strerror))
     except Exception:
-        log.exception('发生了未知错误 原因如下')
+        log.exception('发生了未知错误 原因如下:')
     pool.close()
     log.info('正在等待任务结束')
     try:
@@ -112,32 +101,32 @@ def run_main(tags, thread_num, save_dir):
 
 def get_pic(pic):
     log = getLogger('任务' + str(pic['_id']).rjust(3))
+    log.debug(pic['file_url'])
     try:
         (file, speed) = _fetch_file(pic['file_url'])
         if len(file) == pic['file_size'] and _check(file, pic['md5']):
             _save(file, pic['save_path'])
             log.info('任务结束 下载速度：%s/s' % _convert(speed))
+            return
         else:
             log.warning('数据完整性检查失败 正在重新下载')
-            get_pic(pic)
     except IncompleteRead as e:
         log.warning('数据大小检查失败 正在重新下载')
-        get_pic(pic)
     except HTTPError as e:
         o = e.reason
-        log.exception('服务器错误 %d %s' % (o.errno, o.strerror))
+        log.exception('服务器错误 %s' % o)
     except URLError as e:
         o = e.reason
         log.exception('链接错误 %d %s' % (o.errno, o.strerror))
-        get_pic(pic)
     except Exception:
-        log.exception('发生了未知错误 原因如下：')
+        log.exception('发生了未知错误 原因如下:')
+    get_pic(pic)
 
 # 私有方法
 
 def _fetch_file(url):
     start_time = time()
-    file = urlopen(url).read()
+    file = opener.open(url).read()
     end_time = time()
     exec_time = end_time - start_time
     return (file, (len(file) / exec_time)) # bytes / sec
@@ -170,5 +159,28 @@ def _convert(size):
     else:
         return '%d B' % size
 
+def _httpf(s):
+    return s.replace('https', 'http', 1)
+
 if __name__ == '__main__':
-    main()
+    parser = ArgumentParser(description = 'A crawler for yande.re')
+    parser.add_argument('-v', '--version', action = 'version', version = 'Yande.re Crawler v%s by %s' % (__version__, __author__))
+    parser.add_argument('-p', '--prefix', default = '.', help = 'specify prefix directory')
+    parser.add_argument('-c', '--conf', default = 'config.json', help = 'specify config file path')
+    parser.add_argument('-s', '--no-verify-ssl', default = False, help = "don't verify ssl")
+    args = parser.parse_args()
+    try:
+        chdir(args.prefix)
+    except FileNotFoundError:
+        print('路径不存在! 请检查后重试')
+        exit()
+    file = None
+    try:
+        file = open(args.conf, 'r')
+    except FileNotFoundError:
+        print('找不到配置文件')
+        exit()
+    conf = loads(file.read())
+    file.close()
+    basicConfig(level=DEBUG, format='[%(asctime)s %(name)s %(levelname)s] %(message)s', filename=conf['log_file'], filemode='w')
+    main(conf['tags'], conf['thread_num'], conf['save_dir'])
