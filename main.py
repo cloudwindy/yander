@@ -8,7 +8,7 @@ import ssl
 from ssl                   import _create_unverified_context
 from sys                   import maxsize
 from os                    import chdir, makedirs
-from os.path               import exists
+from os.path               import exists, join
 from time                  import time
 from json                  import loads
 from logging               import getLogger
@@ -16,131 +16,122 @@ from hashlib               import md5
 from argparse              import ArgumentParser
 from http.client           import IncompleteRead
 from urllib.error          import URLError, HTTPError
-from urllib.request        import urlopen, ProxyHandler, build_opener
+from urllib.request        import urlopen, UnknownHandler, ProxyHandler, build_opener, install_opener
 from multiprocessing.dummy import Pool
-from logging               import basicConfig, DEBUG, INFO, WARNING, ERROR, CRITICAL
+
+import logzero
+from logzero import LogFormatter, setup_default_logger, setup_logger
 
 __author__ = 'cloudwindy'
-__version__ = '1.9'
+__version__ = '2.1'
 
-# 如果遇到SSL相关问题 取消这行注释
-ssl._create_default_https_context = _create_unverified_context
-proxy = '127.0.0.1:1080'
-proxy_handler = ProxyHandler({
-    'http': 'http://' + proxy,
-    'https': 'https://' + proxy
-})
-opener = build_opener(proxy_handler)
-def main(tags, thread_num, save_dir):
+
+log_format = '%(color)s[%(levelname)1.1s %(asctime)s] %(name)s:%(end_color)s %(message)s'
+formatter = LogFormatter(fmt=log_format)
+def main(tags):
+    log = setup_logger('主程序', formatter=formatter)
     tags = tags
-    thread_num = thread_num
-    save_dir = save_dir
-    log = getLogger('控制')
-    log.info('Yande.re 下载工具 %s' % __version__)
     if thread_num > 5:
         log.warning('线程数量大于 5 可能导致下载失败')
         log.warning('原因是 Yande.re 网站最大连接数为 5')
     if tags == '':
-        log.info('未指定标签 默认下载所有图片')
+        log.warning('未指定标签 默认下载所有图片')
     pool = Pool(thread_num)
-    try:
-        if not exists(save_dir):
-            log.info('保存路径不存在')
-            log.info('已创建文件夹' + save_dir)
-            makedirs(save_dir)
-        for page in range(1, maxsize):
-            log.info('页面 %d: 正在获取元数据' % page)
-            url = 'http://yande.re/post.json?limit=100&page=%d&tags=%s' % (page, tags)
-            pic_list = loads(opener.open(url).read().decode())
-            # 检测 图片数量
-            if len(pic_list) <= 0:
-                log.info('页面 %d: 已到达最后一页 准备退出' % page)
+    if not exists(save_dir):
+        log.debug('保存路径不存在: ' + save_dir)
+        log.debug('已创建文件夹' + save_dir)
+        makedirs(save_dir)
+    for page in range(1, maxsize):
+        try:
+            if get_page(page, pool, tags):
                 break
-            # 给定 保存路径
-            i = 0
-            while i < len(pic_list):
-                v = pic_list[i]
-                pic_list[i]['save_path'] = '%s%d.%s' % (save_dir, v['id'], v['file_ext'])
-                i += 1
-            # 移除 重复图片
-            for pic in pic_list[:]:
-                if exists(pic['save_path']):
-                    pic_list.remove(pic)
-            # 排序 从大到小排列
-            pic_list.sort(key = lambda pic_list: pic_list['file_size'], reverse = True)
-            # 给定 图片ID
-            i = 0
-            while i < len(pic_list):
-                pic_list[i]['_id'] = i
-                i += 1
-            if len(pic_list) > 0:
-                log.info('页面 %d: 已获取元数据. 共 %d 张图片' % (page, len(pic_list)))
-                log.info('页面 %d: 开始下载' % page)
-                pool.map(get_pic, pic_list)
-                log.info('页面 %d: 下载完毕' % page)
-            else:
-                log.info('页面 %d: 已跳过' % page)
-    except KeyboardInterrupt:
-        log.info('用户已关闭程序 准备退出')
-    except HTTPError as e:
-        o = e.reason
-        log.exception('服务器错误 原因: %s' % o)
-    except URLError as e:
-        o = e.reason
-        log.exception('链接错误 原因: %d %s' % (o.errno, o.strerror))
-    except Exception:
-        log.exception('发生了未知错误 原因如下:')
+        except KeyboardInterrupt:
+            print()
+            log.info('用户已关闭程序 准备退出')
+            break
+        except Exception:
+            log.exception('发生了错误:')
     pool.close()
     log.info('正在等待任务结束')
     try:
         pool.join()
-    except:
+    except KeyboardInterrupt:
+        print()
         log.warning('正在强制停止全部任务')
         log.warning('当前正在下载的数据将被丢弃')
     log.info('下载工具已退出')
 
+def get_page(page, pool, tags):
+    log = setup_logger('页面 %d' % page, formatter=formatter)
+    log.info('正在获取元数据')
+    url = 'https://yande.re/post.json?limit=100&page=%d&tags=%s' % (page, tags)
+    pic_list = []
+    with urlopen(_url(url)) as resp:
+        pic_list = loads(resp.read().decode())
+    # 检测 图片数量
+    if len(pic_list) <= 0:
+        log.info('已到达最后一页 准备退出')
+        return True
+    # 移除 重复图片
+    for pic in pic_list[:]:
+        if exists(_path(pic)):
+            pic_list.remove(pic)
+    # 排序 从大到小排列
+    pic_list.sort(key = lambda pic_list: pic_list['file_size'], reverse=True)
+    # 给定 图片ID
+    for i in range(len(pic_list)):
+        pic_list[i]['_id'] = i
+    if len(pic_list) > 0:
+        log.debug('已获取元数据. 共 %d 张图片' % len(pic_list))
+        log.info('下载开始')
+        pool.map(get_pic, pic_list)
+        log.info('下载完毕')
+    else:
+        log.info('已跳过')
+
 def get_pic(pic):
-    log = getLogger('任务' + str(pic['_id']).rjust(3))
-    log.debug(pic['file_url'])
+    log = setup_logger('任务' + str(pic['_id']).rjust(2), formatter=formatter)
     try:
-        (file, speed) = _fetch_file(pic['file_url'])
+        (file, speed) = _fetch_file(_url(pic['file_url']))
         if len(file) == pic['file_size'] and _check(file, pic['md5']):
-            _save(file, pic['save_path'])
-            log.info('任务结束 下载速度：%s/s' % _convert(speed))
+            _save(file, _path(pic))
+            log.info('下载结束 总速度：%s/s' % _convert(speed * thread_num))
             return
         else:
             log.warning('数据完整性检查失败 正在重新下载')
     except IncompleteRead as e:
         log.warning('数据大小检查失败 正在重新下载')
-    except HTTPError as e:
-        o = e.reason
-        log.exception('服务器错误 %s' % o)
-    except URLError as e:
-        o = e.reason
-        log.exception('链接错误 %d %s' % (o.errno, o.strerror))
     except Exception:
-        log.exception('发生了未知错误 原因如下:')
+        log.exception('下载失败 正在重新下载')
     get_pic(pic)
 
 # 私有方法
 
+def _url(s):
+    if force_http:
+        return s.replace('https', 'http', 1)
+    else:
+        return s
+
+def _path(pic):
+    return join(save_dir, '%d.%s' % (pic['id'], pic['file_ext']))
+
 def _fetch_file(url):
     start_time = time()
-    file = opener.open(url).read()
+    file = urlopen(url).read()
     end_time = time()
     exec_time = end_time - start_time
     return (file, (len(file) / exec_time)) # bytes / sec
 
-def _check(file, file_md5):
+def _check(content, file_md5):
     checker = md5()
-    checker.update(file)
+    checker.update(content)
     result_md5 = checker.hexdigest()
     return result_md5 == file_md5
 
-def _save(file, save_path):
-    f = open(save_path, 'wb')
-    f.write(file)
-    f.close()
+def _save(content, save_path):
+    with open(save_path, 'wb') as f:
+        f.write(content)
 
 def _convert(size):
     # Reference：https://blog.csdn.net/mp624183768/article/details/84892999
@@ -159,28 +150,44 @@ def _convert(size):
     else:
         return '%d B' % size
 
-def _httpf(s):
-    return s.replace('https', 'http', 1)
-
+thread_num = None
+save_dir = None
+force_http = None
 if __name__ == '__main__':
-    parser = ArgumentParser(description = 'A crawler for yande.re')
-    parser.add_argument('-v', '--version', action = 'version', version = 'Yande.re Crawler v%s by %s' % (__version__, __author__))
-    parser.add_argument('-p', '--prefix', default = '.', help = 'specify prefix directory')
-    parser.add_argument('-c', '--conf', default = 'config.json', help = 'specify config file path')
-    parser.add_argument('-s', '--no-verify-ssl', default = False, help = "don't verify ssl")
+    parser = ArgumentParser(description = 'Yande.re 下载工具')
+    parser.add_argument('-v', '--version', action = 'version', version = 'Yande.re 下载工具 v%s by %s' % (__version__, __author__))
+    parser.add_argument('-p', '--prefix', default = '.', help = '制定工作路径')
+    parser.add_argument('-c', '--conf', default = './config.json', help = '指定配置文件路径')
     args = parser.parse_args()
+    log = setup_logger('主程序', formatter=formatter)
+    log.info('Yande.re 下载工具')
     try:
         chdir(args.prefix)
     except FileNotFoundError:
-        print('路径不存在! 请检查后重试')
+        log.error('路径不存在: ' + args.prefix)
         exit()
     file = None
     try:
         file = open(args.conf, 'r')
     except FileNotFoundError:
-        print('找不到配置文件')
+        log.error('找不到配置文件: ' + args.conf)
         exit()
     conf = loads(file.read())
     file.close()
-    basicConfig(level=DEBUG, format='[%(asctime)s %(name)s %(levelname)s] %(message)s', filename=conf['log_file'], filemode='w')
-    main(conf['tags'], conf['thread_num'], conf['save_dir'])
+    thread_num = conf['thread_num']
+    save_dir = conf['save_dir']
+    if conf['force_http']:
+        log.debug('已启用强制 HTTP')
+        force_http = True
+    elif conf['no_check_certificate']:
+        log.debug('已禁用 SSL 证书认证')
+        ssl._create_default_https_context = _create_unverified_context
+    handler = UnknownHandler()
+    if conf['proxy']:
+        log.debug('已启用 HTTP 代理: ' + conf['proxy_addr'])
+        handler = ProxyHandler({
+            'http': 'http://' + conf['proxy_addr'],
+            'https': 'https://' + conf['proxy_addr']
+        })
+    install_opener(build_opener(handler))
+    main(conf['tags'])
