@@ -7,8 +7,8 @@ from Yande.re.
 import ssl
 from ssl                   import _create_unverified_context
 from sys                   import maxsize
-from os                    import chdir, makedirs
-from os.path               import exists, join
+from os                    import chdir, makedirs, remove
+from os.path               import exists, join, getsize
 from time                  import time
 from json                  import loads
 from logging               import getLogger
@@ -20,17 +20,27 @@ from urllib.request        import urlopen, UnknownHandler, ProxyHandler, build_o
 from multiprocessing.dummy import Pool
 
 import logzero
-from logzero import LogFormatter, setup_default_logger, setup_logger
+from logzero  import LogFormatter, setup_default_logger, setup_logger
+from requests import get
 
 __author__ = 'cloudwindy'
 __version__ = '2.1'
 
+# 基本单位
+kb = 1024
+mb = 1024 * 1024
+gb = 1024 * 1024 * 1024
+tb = 1024 * 1024 * 1024 * 1024
 
+CHUNK_SIZE = 256 * kb
+
+# 日志格式
 log_format = '%(color)s[%(levelname)1.1s %(asctime)s] %(name)s:%(end_color)s %(message)s'
 formatter = LogFormatter(fmt=log_format)
+
 def main(tags):
     log = setup_logger('主程序', formatter=formatter)
-    tags = tags
+    log.warning('当前区块大小: %s' % _convert(CHUNK_SIZE))
     if thread_num > 5:
         log.warning('线程数量大于 5 可能导致下载失败')
         log.warning('原因是 Yande.re 网站最大连接数为 5')
@@ -58,24 +68,29 @@ def main(tags):
     except KeyboardInterrupt:
         print()
         log.warning('正在强制停止全部任务')
-        log.warning('当前正在下载的数据将被丢弃')
+        log.warning('当前正在下载的区块将被丢弃')
     log.info('下载工具已退出')
 
+# 获取页面元数据
 def get_page(page, pool, tags):
     log = setup_logger('页面 %d' % page, formatter=formatter)
     log.info('正在获取元数据')
     url = 'https://yande.re/post.json?limit=100&page=%d&tags=%s' % (page, tags)
-    pic_list = []
-    with urlopen(_url(url)) as resp:
-        pic_list = loads(resp.read().decode())
+    pic_list = loads(get(_url(url)).text)
     # 检测 图片数量
     if len(pic_list) <= 0:
         log.info('已到达最后一页 准备退出')
         return True
     # 移除 重复图片
     for pic in pic_list[:]:
+        # 如果图片已有大小等于元数据 移出下载列表
         if exists(_path(pic)):
-            pic_list.remove(pic)
+            size = _get_size(pic)
+            if size > pic['file_size']:
+                log.warning('文件大小%d比实际大小%d还大' % (size, pic['file_size']))
+                remove(_path(pic))
+            if size == pic['file_size']:
+                pic_list.remove(pic)
     # 排序 从大到小排列
     pic_list.sort(key = lambda pic_list: pic_list['file_size'], reverse=True)
     # 给定 图片ID
@@ -89,16 +104,15 @@ def get_page(page, pool, tags):
     else:
         log.info('已跳过')
 
+# 下载一张图片
 def get_pic(pic):
     log = setup_logger('任务' + str(pic['_id']).rjust(2), formatter=formatter)
     try:
-        (file, speed) = _fetch_file(_url(pic['file_url']))
-        if len(file) == pic['file_size'] and _check(file, pic['md5']):
-            _save(file, _path(pic))
-            log.info('下载结束 总速度：%s/s' % _convert(speed * thread_num))
-            return
-        else:
-            log.warning('数据完整性检查失败 正在重新下载')
+        start = 0
+        if exists(_path(pic)):
+            start = _get_size(pic)
+        _fetch_file(log, _url(pic['file_url']), _path(pic),  start, pic['file_size'])
+        return
     except IncompleteRead as e:
         log.warning('数据大小检查失败 正在重新下载')
     except Exception:
@@ -107,38 +121,57 @@ def get_pic(pic):
 
 # 私有方法
 
+# 如果启用了强制HTTP 更换协议
 def _url(s):
     if force_http:
         return s.replace('https', 'http', 1)
     else:
         return s
 
+# 获取文件大小 用于断点续传
+def _get_size(pic):
+    return getsize(_path(pic))
+
+# 根据图片元数据和保存位置生成对应路径
 def _path(pic):
     return join(save_dir, '%d.%s' % (pic['id'], pic['file_ext']))
 
-def _fetch_file(url):
+# 获取单个文件 (断点续传)
+def _fetch_file(log, url, save_path, start, end):
+    log.debug('下载区间 %s - %s' % (_convert(start), _convert(end)))
+    headers = {
+        'Range': '%s-%s' % (str(start), str(end))
+    }
+    req = get(url, stream=True, headers=headers)
+    size = end - start
+    log.info('下载开始 大小: %s' % _convert(size))
     start_time = time()
-    file = urlopen(url).read()
+    with open(save_path, 'ab') as f:
+        chunk_start_time = time()
+        for chunk in req.iter_content(chunk_size=CHUNK_SIZE):
+            if chunk:
+                log.debug('实时速度: %s/s' % _speed(CHUNK_SIZE, chunk_start_time))
+                f.write(chunk)
+                f.flush()
+                chunk_start_time = time()
+            else:
+                break
+    log.info('下载结束 总速度: %s/s' % _speed(size, start_time))
+
+def _speed(size, start_time):
     end_time = time()
     exec_time = end_time - start_time
-    return (file, (len(file) / exec_time)) # bytes / sec
+    speed = size / exec_time
+    return _convert(speed)
 
-def _check(content, file_md5):
-    checker = md5()
-    checker.update(content)
-    result_md5 = checker.hexdigest()
-    return result_md5 == file_md5
-
-def _save(content, save_path):
-    with open(save_path, 'wb') as f:
-        f.write(content)
+#def _check(content, file_md5):
+#    checker = md5()
+#    checker.update(content)
+#    result_md5 = checker.hexdigest()
+#    return result_md5 == file_md5
 
 def _convert(size):
-    # Reference：https://blog.csdn.net/mp624183768/article/details/84892999
-    kb = 1024
-    mb = 1024 * 1024
-    gb = 1024 * 1024 * 1024
-    tb = 1024 * 1024 * 1024 * 1024
+    # 参考：https://blog.csdn.net/mp624183768/article/details/84892999
     if size >= tb:
         return '%.1f TB' % (size / tb)
     elif size >= gb:
@@ -152,7 +185,7 @@ def _convert(size):
 
 thread_num = None
 save_dir = None
-force_http = None
+force_http = False
 if __name__ == '__main__':
     parser = ArgumentParser(description = 'Yande.re 下载工具')
     parser.add_argument('-v', '--version', action = 'version', version = 'Yande.re 下载工具 v%s by %s' % (__version__, __author__))
