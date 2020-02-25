@@ -1,6 +1,11 @@
 {
-	"log_file": "yande.log",
-	"tags": "trap+order:score+-extreme_content",
-	"thread_num": 20,
-	"save_dir": "./save/Trap/"
+        "log": true,
+	"log_file": "yander.log",
+	"tags": "shota+trap+order:score+-extreme_content",
+	"thread_num": 5,
+	"save_dir": "./save/Trap&Shota Combine!!!/",
+	"no_check_certificate": false,
+	"force_http": true,
+	"proxy": false,
+	"proxy_addr": "127.0.0.1:1080"
 }
