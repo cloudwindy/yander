@@ -1,11 +1,10 @@
 {
-        "log": true,
+	"log": false,
 	"log_file": "yander.log",
-	"tags": "shota+trap+order:score+-extreme_content",
+	"tags": "yosuga_no_sora+-extreme_content",
 	"thread_num": 5,
-	"save_dir": "./save/Trap&Shota Combine!!!/",
+	"save_dir": "./save/Yosuga No Sora/",
 	"no_check_certificate": false,
-	"force_http": true,
 	"proxy": false,
-	"proxy_addr": "127.0.0.1:1080"
+	"proxy_addr": "192.168.42.129:8080"
 }
