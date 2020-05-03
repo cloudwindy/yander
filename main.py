@@ -60,7 +60,7 @@ pip3 install tqdm logzero requests
 	exit()
 
 __author__ = 'cloudwindy'
-__version__ = '2.2'
+__version__ = '2.1'
 
 # 基本单位
 kb = 1024
@@ -68,33 +68,30 @@ mb = 1024 * 1024
 gb = 1024 * 1024 * 1024
 tb = 1024 * 1024 * 1024 * 1024
 
-stop = False
 CHUNK_SIZE = 1 * kb
 
 # 日志格式
 log_format = '%(color)s[%(levelname)1.1s %(asctime)s] %(name)s:%(end_color)s %(message)s'
 formatter = LogFormatter(fmt=log_format)
 
-def main_download_mode(tags):
+# 下载模式: 自动下载所有图片
+def main_download_mode():
 	log = _get_logger('主程序')
-	if tags == '':
-		log.warning('未指定标签 默认下载所有图片')
 	pool = Pool(thread_num)
 	if not exists(save_dir):
 		log.debug('保存路径不存在: ' + save_dir)
 		log.debug('已创建文件夹' + save_dir)
 		makedirs(save_dir)
-	for page in range(1, maxsize):
+	for page in range(start, end):
 		try:
-			if get_page(page, pool, tags):
+			if get_page(page, pool):
 				break
 		except KeyboardInterrupt:
 			print()
-			log.info('用户已关闭程序 准备退出')
+			log.info('用户已关闭程序 退出')
 			break
 		except Exception:
 			log.exception('发生了错误:')
-	stop = True
 	pool.close()
 	log.info('正在等待任务结束')
 	try:
@@ -105,11 +102,17 @@ def main_download_mode(tags):
 		log.warning('当前正在下载的任务将被丢弃')
 	log.info('下载工具已退出')
 
-def main_verify_mode(tags):
-	for page in range(1, maxsize):
-		pic_list = _get_pic_list(page, tags)
+# 校验模式: 验证图片完整性 不通过则删除
+def main_verify_mode():
+	main_log = _get_logger('主程序')
+	if not exists(save_dir):
+		main_log.error('请先下载 然后校验')
+		return
+	for page in range(start, end):
+		page_log = _get_logger('页面 %d' % page)
+		pic_list = _get_pic_list(page)
 		if len(pic_list) <= 0:
-			_get_logger('页面 %d' % page).info('已到达最后一页 准备退出')
+			page_log.info('已到达最后一页 退出')
 			return
 		#for pic in pic_list[:]:
 		#	if exists(_path(pic)):
@@ -120,67 +123,52 @@ def main_verify_mode(tags):
 							file = orig_opt,
 							desc = '页面 %d' % page,
 							dynamic_ncols=True):
-				with open(_path(pic), 'rb') as f:
-					realmd5 = md5(f.read()).hexdigest()
-					if realmd5 != pic['md5']:
-						remove(_path(pic))
-					
+				pic_log = _get_logger('图片 %d' % pic['id'])
+				try:
+					with open(_path(pic), 'rb') as f:
+						realmd5 = md5(f.read()).hexdigest()
+						if realmd5 != pic['md5']:
+							path = _path(pic)
+							remove(path)
+							pic_log.warning('%s != %s' % (realmd5, pic['md5']))
+				except FileNotFoundError:
+					pass
+				except:
+					pic_log.exception()
+	main_log.info('校验工具已退出')
+
 # 获取页面元数据
-def get_page(page, pool, tags):
+def get_page(page, pool):
 	log = _get_logger('页面 %d' % page)
 	log.info('正在获取元数据')
-	pic_list = _get_pic_list(page, tags)
+	pic_list = _get_pic_list(page)
 	# 检测 图片数量
 	if len(pic_list) <= 0:
-		log.info('已到达最后一页 准备退出')
-		return True
-	# 移除 重复图片
+		log.info('已到达最后一页 退出')
+		return
+	log.debug('已获取元数据')
+	log.debug('正在移除重复图片...')
 	for pic in pic_list[:]:
 		# 如果图片已有大小等于元数据 移出下载列表
 		if exists(_path(pic)):
 			if _get_size(pic) == pic['file_size']:
 				pic_list.remove(pic)
+	if len(pic_list) <= 0:
+		log.info('已下载完毕 跳过')
+		return
+	log.debug('正在进行大小排序...')
 	# 排序 从大到小排列
 	pic_list.sort(key = lambda pic_list: pic_list['file_size'], reverse=True)
-	if len(pic_list) > 0:
-		log.debug('已获取元数据. 共 %d 张图片' % len(pic_list))
-		log.info('下载开始')
-		pool.map(get_pic, pic_list)
-		log.info('下载完毕')
-	else:
-		log.info('已跳过')
+	log.debug('共 %d 张图片' % len(pic_list))
+	log.info('下载开始')
+	#with _redirect_tqdm() as opt:
+	#	orig_opt = opt
+	pool.map(get_pic, pic_list)
+	log.info('下载完毕')
 
 # 下载单张图片
 # 由于 Yande.re 不支持, 断点续传功能已移除
 def get_pic(pic):
-<<<<<<< Updated upstream
-	if stop:
-		return
-	log = _get_logger('图片' + str(pic['id']))
-	try:
-		req = Session()
-		req.mount('http://', HTTPAdapter(max_retries=0))
-		req.mount('https://', HTTPAdapter(max_retries=0))
-		res = req.get(pic['file_url'], 
-					  stream=True,
-					  timeout=10,
-					  verify=verify,
-					  proxies=proxies)
-		with open(_path(pic), 'wb') as f:
-			with tqdm(unit='B',
-				 unit_scale=True,
-				 desc='图片' + str(pic['id']),
-				 total=pic['file_size'],
-				 leave=False,
-				 dynamic_ncols=True) as pbar:
-				for chunk in res.iter_content(chunk_size=CHUNK_SIZE):
-					if chunk:
-						pbar.update(f.write(chunk))
-					else:
-						break
-		return
-	except Exception as e:
-=======
 	log = _get_logger('图片' + str(pic['id']))
 	try:
 		# 禁用自动重试
@@ -218,7 +206,6 @@ def get_pic(pic):
 	except Exception:
 		# 错误重试
 		log.exception('正在重试...')
->>>>>>> Stashed changes
 		get_pic(pic)
 
 # 私有方法
@@ -227,25 +214,14 @@ def get_pic(pic):
 def _get_logger(name):
 	return setup_logger(name, logfile=logfile, formatter=formatter)
 
-<<<<<<< Updated upstream
-def _get_pic_list(page, tags):
-=======
 # 请求图片列表API
 def _get_pic_list(page):
->>>>>>> Stashed changes
 	url = 'https://yande.re/post.json?limit=100&page=%d&tags=%s' % (page, tags)
 	return loads(get(url, verify=verify, proxies=proxies).text)
 
 # 根据图片元数据和保存位置生成对应路径
 def _path(pic):
 	return join(save_dir, '%d.%s' % (pic['id'], pic['file_ext']))
-<<<<<<< Updated upstream
-
-# 获取文件大小 用于检查是否下载完了
-def _get_size(pic):
-	return getsize(_path(pic))
-=======
->>>>>>> Stashed changes
 
 # 获取文件大小 用于检查是否下载完了
 def _get_size(pic):
@@ -265,10 +241,7 @@ def _convert(size):
 	else:
 		return '%d B' % size
 
-<<<<<<< Updated upstream
-=======
 # 标准输出及错误重定向到进度条
->>>>>>> Stashed changes
 @contextmanager
 def _redirect_tqdm():
 	# 参考: https://github.com/tqdm/tqdm#redirecting-writing
@@ -283,19 +256,13 @@ def _redirect_tqdm():
     finally:
         sys.stdout, sys.stderr = orig_out_err
 
-<<<<<<< Updated upstream
-=======
 tags = None
->>>>>>> Stashed changes
 logfile = None
 verify = True
 proxies = None
 thread_num = None
 save_dir = None
-<<<<<<< Updated upstream
-=======
 orig_opt = None
->>>>>>> Stashed changes
 force_http = False
 if __name__ == '__main__':
 	parser = ArgumentParser(description = 'Yande.re 下载工具')
@@ -322,10 +289,6 @@ if __name__ == '__main__':
 	log.info('Yande.re 下载工具')
 	conf = loads(args.conf.read())
 	args.conf.close()
-<<<<<<< Updated upstream
-	thread_num = conf['thread_num']
-	save_dir = conf['save_dir']
-=======
 	tags = conf['tags']
 	if tags == '':
 		log.warning('未指定标签 默认处理所有图片')
@@ -337,7 +300,6 @@ if __name__ == '__main__':
 		end = maxsize
 	else:
 		end = conf['end']
->>>>>>> Stashed changes
 	if conf['log']:
 		log.debug('已启用日志文件: ' + conf['log_file'])
 		logfile = conf['log_file']
@@ -351,12 +313,6 @@ if __name__ == '__main__':
 			'https': 'http://' + conf['proxy_addr']
 		}
 	if args.verify:
-<<<<<<< Updated upstream
-		main_verify_mode(conf['tags'])
-	else:
-		main_download_mode(conf['tags'])
-=======
 		main_verify_mode()
 	else:
 		main_download_mode()
->>>>>>> Stashed changes
