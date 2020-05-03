@@ -68,13 +68,12 @@ mb = 1024 * 1024
 gb = 1024 * 1024 * 1024
 tb = 1024 * 1024 * 1024 * 1024
 
+# 区块大小
 CHUNK_SIZE = 1 * kb
-
 # 日志格式
-log_format = '%(color)s[%(levelname)1.1s %(asctime)s] %(name)s:%(end_color)s %(message)s'
-formatter = LogFormatter(fmt=log_format)
+LOG_FORMAT = '%(color)s[%(levelname)1.1s %(asctime)s] %(name)s:%(end_color)s %(message)s'
 
-# 下载模式: 自动下载所有图片
+# 下载模式: 下载指定范围内的图片
 def main_download_mode():
 	log = _get_logger('主程序')
 	pool = Pool(thread_num)
@@ -169,7 +168,7 @@ def get_page(page, pool):
 # 下载单张图片
 # 由于 Yande.re 不支持, 断点续传功能已移除
 def get_pic(pic):
-	log = _get_logger('图片' + str(pic['id']))
+	log = _get_logger('图片' + str(pic['id']), True)
 	try:
 		# 禁用自动重试
 		req = Session()
@@ -211,8 +210,12 @@ def get_pic(pic):
 # 私有方法
 
 # 获取Logger
-def _get_logger(name):
-	return setup_logger(name, logfile=logfile, formatter=formatter)
+def _get_logger(name, log_to_file = False):
+	formatter = LogFormatter(fmt=LOG_FORMAT)
+	if not log_to_file:
+		return setup_logger(name, formatter=formatter)
+	else:
+		return setup_logger(name, logfile=logfile, formatter=formatter)
 
 # 请求图片列表API
 def _get_pic_list(page):
