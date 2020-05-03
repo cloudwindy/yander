@@ -153,6 +153,7 @@ def get_page(page, pool, tags):
 # 下载单张图片
 # 由于 Yande.re 不支持, 断点续传功能已移除
 def get_pic(pic):
+<<<<<<< Updated upstream
 	if stop:
 		return
 	log = _get_logger('图片' + str(pic['id']))
@@ -179,6 +180,45 @@ def get_pic(pic):
 						break
 		return
 	except Exception as e:
+=======
+	log = _get_logger('图片' + str(pic['id']))
+	try:
+		# 禁用自动重试
+		req = Session()
+		req.mount('http://', HTTPAdapter(max_retries=0))
+		req.mount('https://', HTTPAdapter(max_retries=0))
+		# 向图片地址发起请求
+		res = req.get(url=pic['file_url'],
+					  stream=True,
+					  timeout=30,
+					  verify=verify,
+					  proxies=proxies)
+		# HTTP 状态码检查
+		res.raise_for_status()
+		# 打开文件准备写入
+		with open(_path(pic), 'wb') as f:
+			# 配置进度条
+			with tqdm(unit='B',
+					  unit_scale=True,
+					  #file=orig_opt,
+					  desc='图片' + str(pic['id']),
+					  total=pic['file_size'],
+					  leave=False,
+					  dynamic_ncols=True) as pbar:
+				# 按区块读取
+				for chunk in res.iter_content(chunk_size=CHUNK_SIZE):
+					# 判断区块是否为空
+					if chunk:
+						# 区块写入文件并更新进度条
+						pbar.update(f.write(chunk))
+					else:
+						# 空区块 下载完成
+						break
+		#log.info("下载完成")
+	except Exception:
+		# 错误重试
+		log.exception('正在重试...')
+>>>>>>> Stashed changes
 		get_pic(pic)
 
 # 私有方法
@@ -187,18 +227,31 @@ def get_pic(pic):
 def _get_logger(name):
 	return setup_logger(name, logfile=logfile, formatter=formatter)
 
+<<<<<<< Updated upstream
 def _get_pic_list(page, tags):
+=======
+# 请求图片列表API
+def _get_pic_list(page):
+>>>>>>> Stashed changes
 	url = 'https://yande.re/post.json?limit=100&page=%d&tags=%s' % (page, tags)
 	return loads(get(url, verify=verify, proxies=proxies).text)
 
 # 根据图片元数据和保存位置生成对应路径
 def _path(pic):
 	return join(save_dir, '%d.%s' % (pic['id'], pic['file_ext']))
+<<<<<<< Updated upstream
+
+# 获取文件大小 用于检查是否下载完了
+def _get_size(pic):
+	return getsize(_path(pic))
+=======
+>>>>>>> Stashed changes
 
 # 获取文件大小 用于检查是否下载完了
 def _get_size(pic):
 	return getsize(_path(pic))
 
+# 转换为人类可读单位
 def _convert(size):
 	# 参考: https://blog.csdn.net/mp624183768/article/details/84892999
 	if size >= tb:
@@ -212,6 +265,10 @@ def _convert(size):
 	else:
 		return '%d B' % size
 
+<<<<<<< Updated upstream
+=======
+# 标准输出及错误重定向到进度条
+>>>>>>> Stashed changes
 @contextmanager
 def _redirect_tqdm():
 	# 参考: https://github.com/tqdm/tqdm#redirecting-writing
@@ -226,11 +283,19 @@ def _redirect_tqdm():
     finally:
         sys.stdout, sys.stderr = orig_out_err
 
+<<<<<<< Updated upstream
+=======
+tags = None
+>>>>>>> Stashed changes
 logfile = None
 verify = True
 proxies = None
 thread_num = None
 save_dir = None
+<<<<<<< Updated upstream
+=======
+orig_opt = None
+>>>>>>> Stashed changes
 force_http = False
 if __name__ == '__main__':
 	parser = ArgumentParser(description = 'Yande.re 下载工具')
@@ -257,8 +322,22 @@ if __name__ == '__main__':
 	log.info('Yande.re 下载工具')
 	conf = loads(args.conf.read())
 	args.conf.close()
+<<<<<<< Updated upstream
 	thread_num = conf['thread_num']
 	save_dir = conf['save_dir']
+=======
+	tags = conf['tags']
+	if tags == '':
+		log.warning('未指定标签 默认处理所有图片')
+	start = conf['start']
+	thread_num = conf['thread_num']
+	save_dir = conf['save_dir']
+	if conf['end'] == -1:
+		log.debug('程序将处理到最后一页')
+		end = maxsize
+	else:
+		end = conf['end']
+>>>>>>> Stashed changes
 	if conf['log']:
 		log.debug('已启用日志文件: ' + conf['log_file'])
 		logfile = conf['log_file']
@@ -272,6 +351,12 @@ if __name__ == '__main__':
 			'https': 'http://' + conf['proxy_addr']
 		}
 	if args.verify:
+<<<<<<< Updated upstream
 		main_verify_mode(conf['tags'])
 	else:
 		main_download_mode(conf['tags'])
+=======
+		main_verify_mode()
+	else:
+		main_download_mode()
+>>>>>>> Stashed changes
