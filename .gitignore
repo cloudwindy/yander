@@ -106,4 +106,4 @@ venv.bak/
 # custom
 save/
 config.json
-.vscode
+.vscode/launch.json
