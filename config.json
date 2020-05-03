@@ -1,10 +1,12 @@
 {
+	"start": 1,
+	"end": 2,
 	"log": false,
 	"log_file": "yander.log",
-	"tags": "yosuga_no_sora+-extreme_content",
+	"tags": "otome_ga_tsumugu_koi_no_canvas",
 	"thread_num": 5,
-	"save_dir": "./save/Yosuga No Sora/",
+	"save_dir": "./Otome Ga Tsumugu Koi No Canvas/",
 	"no_check_certificate": false,
 	"proxy": false,
-	"proxy_addr": "192.168.42.129:8080"
+	"proxy_addr": "127.0.0.1:8080"
 }
