@@ -29,11 +29,12 @@ sudo pacman -S python3
 
 # Python内置库
 import ssl
+from os                    import chdir, makedirs, remove
 from ssl                   import _create_unverified_context
 from sys                   import maxsize
-from os                    import chdir, makedirs, remove
-from os.path               import exists, join, getsize
+from time                  import time
 from json                  import loads
+from os.path               import exists, join, getsize
 from hashlib               import md5
 from argparse              import ArgumentParser
 from contextlib            import contextmanager
@@ -43,7 +44,7 @@ from multiprocessing.dummy import Pool
 try:
 	from tqdm              import tqdm
 	from tqdm.contrib      import DummyTqdmFile
-	from logzero           import LogFormatter, setup_logger
+	from logzero           import setup_logger, LogFormatter
 	from requests          import Session, get
 	from requests.adapters import HTTPAdapter
 except ImportError:
@@ -51,7 +52,7 @@ except ImportError:
 严重错误: Yande.re 下载工具缺少一些必要的依赖
 
 tqdm     - 用于显示进度
-logzero  - 用于记录日志
+loguru   - 用于记录日志
 requests - 用于发起请求
 
 请运行以下的命令以安装这些依赖
@@ -60,7 +61,7 @@ pip3 install tqdm logzero requests
 	exit()
 
 __author__ = 'cloudwindy'
-__version__ = '2.1'
+__version__ = '2.4'
 
 # 基本单位
 kb = 1024
@@ -68,12 +69,13 @@ mb = 1024 * 1024
 gb = 1024 * 1024 * 1024
 tb = 1024 * 1024 * 1024 * 1024
 
-# 区块大小
-CHUNK_SIZE = 1 * kb
-# 日志格式
-LOG_FORMAT = '%(color)s[%(levelname)1.1s %(asctime)s] %(name)s:%(end_color)s %(message)s'
+CHUNK_SIZE = 16 * kb
 
-# 下载模式: 下载指定范围内的图片
+# 日志格式
+LOG_FORMAT = LogFormatter(fmt='%(color)s[%(levelname)1.1s %(asctime)s] %(name)s:%(end_color)s %(message)s')
+RECORD_FORMAT = LogFormatter(fmt='[%(levelname)1.1s %(asctime)s] %(name)s: %(message)s')
+
+# 下载模式: 自动下载所有图片
 def main_download_mode():
 	log = _get_logger('主程序')
 	pool = Pool(thread_num)
@@ -113,16 +115,10 @@ def main_verify_mode():
 		if len(pic_list) <= 0:
 			page_log.info('已到达最后一页 退出')
 			return
-		#for pic in pic_list[:]:
-		#	if exists(_path(pic)):
-		#		if _get_size(pic) != pic['file_size']:
-		#			pic_list.remove(pic)
-		with _redirect_tqdm() as orig_opt:
-			for pic in tqdm(pic_list,
-							file = orig_opt,
-							desc = '页面 %d' % page,
-							dynamic_ncols=True):
-				pic_log = _get_logger('图片 %d' % pic['id'])
+		for pic in tqdm(pic_list,
+						desc = '页面 %d' % page,
+						dynamic_ncols=True):
+				pic_log = _get_logger('图片 %d' % pic['id'], record=True)
 				try:
 					with open(_path(pic), 'rb') as f:
 						realmd5 = md5(f.read()).hexdigest()
@@ -132,7 +128,7 @@ def main_verify_mode():
 							pic_log.warning('%s != %s' % (realmd5, pic['md5']))
 				except FileNotFoundError:
 					pass
-				except:
+				except Exception:
 					pic_log.exception()
 	main_log.info('校验工具已退出')
 
@@ -144,7 +140,7 @@ def get_page(page, pool):
 	# 检测 图片数量
 	if len(pic_list) <= 0:
 		log.info('已到达最后一页 退出')
-		return
+		return True
 	log.debug('已获取元数据')
 	log.debug('正在移除重复图片...')
 	for pic in pic_list[:]:
@@ -160,38 +156,39 @@ def get_page(page, pool):
 	pic_list.sort(key = lambda pic_list: pic_list['file_size'], reverse=True)
 	log.debug('共 %d 张图片' % len(pic_list))
 	log.info('下载开始')
-	#with _redirect_tqdm() as opt:
-	#	orig_opt = opt
 	pool.map(get_pic, pic_list)
 	log.info('下载完毕')
 
 # 下载单张图片
 # 由于 Yande.re 不支持, 断点续传功能已移除
 def get_pic(pic):
-	log = _get_logger('图片' + str(pic['id']), True)
+	log = _get_logger('图片' + str(pic['id']), record=True)
 	try:
+		log.info('下载开始 大小: %s' % _convert(pic['file_size']))
 		# 禁用自动重试
 		req = Session()
 		req.mount('http://', HTTPAdapter(max_retries=0))
 		req.mount('https://', HTTPAdapter(max_retries=0))
+		t1 = time()
 		# 向图片地址发起请求
-		res = req.get(url=pic['file_url'],
+		res = req.get(pic['file_url'],
 					  stream=True,
 					  timeout=30,
 					  verify=verify,
 					  proxies=proxies)
 		# HTTP 状态码检查
 		res.raise_for_status()
+		t2 = time()
+		log.info('连接完成 用时: %d毫秒' % int((t2 - t1) * 100))
 		# 打开文件准备写入
 		with open(_path(pic), 'wb') as f:
 			# 配置进度条
 			with tqdm(unit='B',
-					  unit_scale=True,
-					  #file=orig_opt,
-					  desc='图片' + str(pic['id']),
-					  total=pic['file_size'],
-					  leave=False,
-					  dynamic_ncols=True) as pbar:
+				 unit_scale=True,
+				 desc='图片' + str(pic['id']),
+				 total=pic['file_size'],
+				 leave=False,
+				 dynamic_ncols=True) as pbar:
 				# 按区块读取
 				for chunk in res.iter_content(chunk_size=CHUNK_SIZE):
 					# 判断区块是否为空
@@ -201,21 +198,28 @@ def get_pic(pic):
 					else:
 						# 空区块 下载完成
 						break
-		#log.info("下载完成")
-	except Exception:
+		t3 = time()
+		speed = _convert(pic['file_size'] / (t3-t2))
+		log.info("下载完成 速度: %s/s", speed)
+	except Exception as e:
 		# 错误重试
 		log.exception('正在重试...')
 		get_pic(pic)
 
 # 私有方法
 
+'''
+class CLogger():
+	def __init__(self, name):
+		self = setup_logger(name, logfile=logfile,formatter=formatter)
+'''
 # 获取Logger
-def _get_logger(name, log_to_file = False):
-	formatter = LogFormatter(fmt=LOG_FORMAT)
-	if not log_to_file:
-		return setup_logger(name, formatter=formatter)
+def _get_logger(name, record = False):
+	if record:
+		logger = setup_logger(name, logfile=logfile, formatter=RECORD_FORMAT, disableStderrLogger=True)
 	else:
-		return setup_logger(name, logfile=logfile, formatter=formatter)
+		logger = setup_logger(name, formatter=LOG_FORMAT)
+	return logger
 
 # 请求图片列表API
 def _get_pic_list(page):
@@ -261,11 +265,11 @@ def _redirect_tqdm():
 
 tags = None
 logfile = None
+autopurge = True
 verify = True
 proxies = None
 thread_num = None
 save_dir = None
-orig_opt = None
 force_http = False
 if __name__ == '__main__':
 	parser = ArgumentParser(description = 'Yande.re 下载工具')
@@ -283,15 +287,17 @@ if __name__ == '__main__':
 						type = open,
 						default = './config.json',
 						help = '指定配置文件路径')
-	parser.add_argument('--verify',
+	parser.add_argument('-V',
+						'--verify',
 						action='store_true',
 						default = False,
 						help = '检查文件完整性')
 	args = parser.parse_args()
 	log = _get_logger('初始化')
-	log.info('Yande.re 下载工具')
+	log.info('Yande.re %s工具' % ('校验' if args.verify else '下载'))
 	conf = loads(args.conf.read())
 	args.conf.close()
+	except_tags = '-' + conf['except_tags'].replace('-', '+-')
 	tags = conf['tags']
 	if tags == '':
 		log.warning('未指定标签 默认处理所有图片')
@@ -299,22 +305,27 @@ if __name__ == '__main__':
 	thread_num = conf['thread_num']
 	save_dir = conf['save_dir']
 	if conf['end'] == -1:
-		log.debug('程序将处理到最后一页')
 		end = maxsize
+		log.warning('程序将处理到最后一页')
+	elif conf['end'] == 0:
+		end = start + 1
+		log.warning('程序将仅处理第 %d 页' % start)
 	else:
-		end = conf['end']
-	if conf['log']:
-		log.debug('已启用日志文件: ' + conf['log_file'])
-		logfile = conf['log_file']
+		end = conf['end'] + 1
+	logfile = conf['log']
+	if conf['log_autopurge'] and exists(logfile):
+		remove(logfile)
+		log.warning('已删除旧日志: ' + logfile)
 	if conf['no_check_certificate']:
-		log.debug('已禁用 SSL 证书认证')
 		verify = False
+		log.warning('已禁用 SSL 证书认证')
 	if conf['proxy']:
-		log.debug('已启用 HTTP(S) 代理: ' + conf['proxy_addr'])
+		addr = conf['proxy_addr']
 		proxies = {
-			'http': 'http://' + conf['proxy_addr'],
-			'https': 'http://' + conf['proxy_addr']
+			'http': 'http://' + addr,
+			'https': 'http://' + addr
 		}
+		log.warning('已启用 HTTP(S) 代理: %s' % conf['proxy_addr'])
 	if args.verify:
 		main_verify_mode()
 	else:
