@@ -1,10 +1,12 @@
 {
 	"start": 1,
 	"end": -1,
-	"error_log": "yander.log",
-	"tags": "stockings+rating:e+order:score",
-	"thread_num": 5,
-	"save_dir": "./save/Stockings/",
+	"log": "yander.log",
+	"log_autopurge": true,
+	"tags": "anal+rating:e+order:score",
+	"except_tags": "extreme_content-tentacle-elf-pointy_ears",
+	"thread_num": 10,
+	"save_dir": "./save/Anal/",
 	"no_check_certificate": false,
 	"proxy": false,
 	"proxy_addr": "127.0.0.1:8080"
