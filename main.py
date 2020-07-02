@@ -5,25 +5,25 @@
 import sys
 if sys.version_info.major != 3:
 	print('''
-严重错误: Yande.re 下载工具必须使用 Python 3
+ 严重错误: Yande.re 下载工具必须使用 Python 3
 
-如果您使用的操作系统是 Windows:
-请访问 https://www.python.org/downloads/windows/
-找到 Latest Python 3 Release
-找到 Files 章节并点击 Windows x86-64 executable installer
-请以管理员权限运行下载后的文件
+ 如果您使用的操作系统是 Windows:
+ 请访问 https://www.python.org/downloads/windows/
+ 找到 Latest Python 3 Release
+ 找到 Files 章节并点击 Windows x86-64 executable installer
+ 请以管理员权限运行下载后的文件
 
-如果您使用的操作系统是 Debian & Ubuntu:
-请运行以下命令
-sudo apt install -y python3
+ 如果您使用的操作系统是 Debian & Ubuntu:
+ 请运行以下命令
+ sudo apt install -y python3
 
-如果您使用的操作系统是 Red Hat & CentOS:
-请运行以下命令
-sudo yum install -y python3
+ 如果您使用的操作系统是 Red Hat & CentOS:
+ 请运行以下命令
+ sudo yum install -y python3
 
-如果您使用的操作系统是 Arch Linux:
-请运行以下命令
-sudo pacman -S python3
+ 如果您使用的操作系统是 Arch Linux:
+ 请运行以下命令
+ sudo pacman -S python3
 	''')
 	exit()
 
@@ -41,22 +41,35 @@ from contextlib            import contextmanager
 from multiprocessing.dummy import Pool
 
 # 依赖安装提示
+
+missing = []
 try:
 	from tqdm              import tqdm
 	from tqdm.contrib      import DummyTqdmFile
+except ImportError:
+	missing.append('tqdm')
+
+try:
 	from logzero           import setup_logger, LogFormatter
+except ImportError:
+	missing.append('logzero')
+
+try:
 	from requests          import Session, get
 	from requests.adapters import HTTPAdapter
 except ImportError:
-	print('''
-严重错误: Yande.re 下载工具缺少一些必要的依赖
+	missing.append('requests')
 
-tqdm     - 用于显示进度
-loguru   - 用于记录日志
-requests - 用于发起请求
+if missing:
+	print(f'''
+ 严重错误: Yande.re 下载工具缺少一些必要的依赖
 
-请运行以下的命令以安装这些依赖
-pip3 install tqdm logzero requests
+ tqdm     - 用于显示进度 {"(缺失)" if "tqdm" in missing else ""}
+ logzero  - 用于记录日志 {"(缺失)" if "logzero" in missing else ""}
+ requests - 用于发起请求 {"(缺失)" if "requests" in missing else ""}
+
+ 请运行以下的命令以安装这些依赖
+ pip3 install tqdm logzero requests
 ''')
 	exit()
 
