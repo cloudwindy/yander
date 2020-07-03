@@ -3,10 +3,10 @@
 	"end": -1,
 	"log": "yander.log",
 	"log_autopurge": true,
-	"tags": "anal+rating:e+order:score",
+	"tags": "rating:e+order:score",
 	"except_tags": "extreme_content-tentacle-elf-pointy_ears",
-	"thread_num": 10,
-	"save_dir": "./save/Anal/",
+	"thread_num": 5,
+	"save_dir": "./save/OrderByScore/",
 	"no_check_certificate": false,
 	"proxy": false,
 	"proxy_addr": "127.0.0.1:8080"
