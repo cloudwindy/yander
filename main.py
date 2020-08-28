@@ -117,7 +117,7 @@ class Application:
 		args.conf.close()
 		# - 可选参数 thread_num 线程数量
 		# 默认值: 1
-		self.thread_num = conf['thead_num'] if conf.get('thread_num') else 1
+		self.thread_num = conf.get('thread_num', 1)
 		# - 必选参数 save_dir 保存路径
 		self.save_dir = conf['save_dir']
 		# - 可选参数 tags 主标签
