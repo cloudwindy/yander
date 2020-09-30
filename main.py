@@ -338,7 +338,6 @@ def _convert(size):
 
 # 无聊的全局变量们
 
-
 __author__ = 'cloudwindy'
 
 # 基本单位
@@ -348,4 +347,5 @@ gb = 1024 * 1024 * 1024
 tb = 1024 * 1024 * 1024 * 1024
 
 if __name__ == '__main__':
+    init()
     Application()
