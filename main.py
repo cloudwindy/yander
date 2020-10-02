@@ -197,7 +197,7 @@ class Application:
             pic_list = self._get_pic_list(page)
             if len(pic_list) <= 0:
                 page_ui.note('已到达最后一页 退出')
-                return
+                return True
             for pic in tqdm(pic_list,
                             desc='页面 %d' % page,
                             dynamic_ncols=True):
