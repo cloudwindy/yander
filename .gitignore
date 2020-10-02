@@ -106,6 +106,6 @@ venv.bak/
 # custom
 save/
 yander.log
-config.json
 .vs/
 .vscode/
+config.json
