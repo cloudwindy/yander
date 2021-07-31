@@ -67,9 +67,9 @@ class Flags:
 
 # 导入本地模块
 if Flags.UI_PRINTER_VER_1:
-    from cli1 import UIPrinter, Fore, Back, Style, init
+    from cli.v1 import UIPrinter, Fore, Back, Style, init, deinit
 else:
-    from cli2 import UIPrinter, Fore, Back, Style, init
+    from cli.v2 import UIPrinter, Fore, Back, Style, init, deinit
 
 
 class Application:
@@ -175,7 +175,7 @@ class Application:
                 ui.note('用户已关闭程序 退出')
                 break
             except Exception:
-                ui.fail('发生了错误:')
+                ui.exception('发生了错误:')
         pool.close()
         ui.note('正在等待任务结束')
         try:
@@ -214,6 +214,7 @@ class Application:
                     pass
                 except Exception:
                     pic_log.exception('')
+                    break
         main_ui.note('校验工具已退出')
 
     def get_page(self, page, pool):
@@ -349,3 +350,4 @@ __author__ = 'cloudwindy'
 if __name__ == '__main__':
     init()
     Application()
+    deinit()

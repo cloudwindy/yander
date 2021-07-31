@@ -3,10 +3,10 @@
 	"end": -1,
 	"log": "yander.log",
 	"log_autopurge": true,
-	"tags": "loli+stockings",
+	"tags": "order:score+rating:s",
 	"except_tags": "extreme_content-tentacle",
 	"thread_num": 5,
-	"save_dir": "./save/Loli Stockings/",
+	"save_dir": "./save/OrderByScore/",
 	"proxy": true,
 	"proxy_addr": "127.0.0.1:1080"
 }
