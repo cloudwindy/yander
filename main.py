@@ -175,7 +175,7 @@ class Application:
                 ui.note('用户已关闭程序 退出')
                 break
             except Exception:
-                ui.exception('发生了错误:')
+                ui.ex('发生了错误:')
         pool.close()
         ui.note('正在等待任务结束')
         try:
