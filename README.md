@@ -1,7 +1,7 @@
 # yande-downloader (yander)
 本项目是图片爬虫项目，可以从如 https://yande.re 之类的以 danbooru 为基础的网站上爬取图片（可以爬R18）。为了得到最佳的速率，建议使用离目标网站同一国家甚至同一机房的服务器。（要爬yandere的话建议使用日本主机）
 ## For English users
-This is a crawler project intended to downloading images from https://yande.re or similar websites. To get the best speed, it's recommended to use a machine as close as possible to the target website. By the way I'm too lazy to translate this page to English but feel free to create new issues.
+This is a crawler project for downloading images from https://yande.re or similar websites. To get the best speed, it's recommended to use a server as close as possible to the target website. By the way I'm too lazy to translate this page to English but feel free to create new issues.
 
 # Yander 爬虫工具
 ## Windows 安装指南
